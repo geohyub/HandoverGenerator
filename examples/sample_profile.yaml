@@ -1,0 +1,81 @@
+# ============================================
+# Handover Validation Profile
+# Client: SAMPLE
+# Project: Example Route Survey 2026
+# Generated: 2026-02-10
+# ============================================
+
+profile_name: "SAMPLE_2026_Route_Survey"
+base: "base_geoview.yaml"
+client: "SAMPLE"
+project: "Example Route Survey 2026"
+generated_from: "example (manual)"
+generated_date: "2026-02-10"
+notes: "Sample profile for demonstration"
+
+variables:
+  project_code: null      # CLI에서 --var project_code=PRJ001 로 주입
+  area_code: null          # CLI에서 --var area_code=RS 로 주입
+
+line_list:
+  source: "line_list.csv"
+  line_id_column: "LineName"
+  status_column: "Status"
+  status_filter: "Completed"
+
+folders:
+  - path: "01_Raw_Data/01_SBP"
+    description: "Raw SBP data"
+    rules:
+      - type: file_pattern
+        pattern: "*.sgy"
+        naming_regex: "^{project_code}_{area_code}_(?P<line>L\\d{4})_SBP_RAW\\.sgy$"
+      - type: count_match
+        match_to: line_list
+      - type: min_file_size
+        min_bytes: 1024
+
+  - path: "01_Raw_Data/02_MBES"
+    description: "Raw MBES data"
+    rules:
+      - type: file_pattern
+        pattern: "*.all"
+        naming_regex: "^{project_code}_{area_code}_(?P<line>L\\d{4})_MBES\\.all$"
+      - type: count_match
+        match_to: line_list
+
+  - path: "02_Processed_Data/01_SBP"
+    description: "Processed SBP SEG-Y"
+    rules:
+      - type: file_pattern
+        pattern: "*.sgy"
+        naming_regex: "^{project_code}_{area_code}_(?P<line>L\\d{4})_SBP_PROC\\.sgy$"
+      - type: count_match
+        match_to: line_list
+
+  - path: "03_Navigation"
+    description: "Navigation data"
+    rules:
+      - type: required_files
+        files:
+          - "{project_code}_Final_Navigation.csv"
+          - "{project_code}_Track_Chart.pdf"
+
+  - path: "04_Reports"
+    description: "Project reports"
+    rules:
+      - type: required_files
+        files:
+          - "{project_code}_Processing_Report_Rev*.pdf"
+          - "{project_code}_Processing_Report_Rev*.docx"
+          - "{project_code}_Equipment_Calibration.pdf"
+      - type: no_temp_files
+
+  - path: "05_GIS"
+    description: "GIS deliverables"
+    optional: true
+    rules:
+      - type: required_files
+        files:
+          - "{project_code}_Survey_Area.shp"
+          - "{project_code}_Pipeline_Route.kml"
