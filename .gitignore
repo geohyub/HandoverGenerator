@@ -7,3 +7,6 @@ build/
 .pytest_cache/
 *.xlsx
 .env
+*.spec
+*.exe
+HandoverValidator

@@ -17,14 +17,18 @@ setup(
         "PyYAML>=6.0",
         "pandas>=1.5",
         "openpyxl>=3.0",
+        "PyQt5>=5.15",
     ],
     extras_require={
         "segy": ["segyio>=1.9"],
-        "dev": ["pytest>=7.0", "pytest-cov"],
+        "dev": ["pytest>=7.0", "pytest-cov", "pyinstaller>=6.0"],
     },
     entry_points={
         "console_scripts": [
             "handover-check=handover_check.cli:main",
+        ],
+        "gui_scripts": [
+            "handover-check-gui=handover_check.gui:main",
         ],
     },
 )
