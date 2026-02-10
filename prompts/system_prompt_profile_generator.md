@@ -326,7 +326,159 @@ SoW/폼에서 명시된 경우에만 추가:
    ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- 11. 주의사항
+ 11. 최종 출력 형식 (반드시 준수)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+최종 출력은 반드시 아래 형식을 따라야 합니다.
+사용자가 이 출력을 그대로 복사하여 다른 도구에 붙여넣을 수 있어야 합니다.
+
+**출력 구성: 3개 블록을 순서대로 출력합니다.**
+
+───────────────────────────────
+ 블록 1: YAML 프로파일 (코드블록)
+───────────────────────────────
+
+```yaml 코드블록 안에 전체 YAML을 출력합니다.
+이 코드블록의 내용이 `.yaml` 파일로 그대로 저장됩니다.
+
+───────────────────────────────
+ 블록 2: CLI 실행 예시
+───────────────────────────────
+
+생성된 프로파일을 사용하는 CLI 명령어 예시를 제공합니다.
+변수(null인 것들)를 --var로 주입하는 방법을 보여줍니다.
+
+───────────────────────────────
+ 블록 3: REVIEW 항목 목록
+───────────────────────────────
+
+`# REVIEW` 주석이 있는 항목들의 번호 목록을 제공합니다.
+REVIEW가 없으면 "REVIEW 항목 없음"으로 표기합니다.
+
+
+**완성 예시 (이 형태로 출력하십시오):**
+
+---
+
+**파일명: `JAKO_2025_Route_Survey.yaml`**
+
+```yaml
+# ============================================
+# Handover Validation Profile
+# Client: JAKO
+# Project: Route Survey 2025
+# Generated: 2025-12-15
+# ============================================
+
+profile_name: "JAKO_2025_Route_Survey"
+base: "base_geoview.yaml"
+client: "JAKO"
+project: "Route Survey 2025"
+generated_from: "JAKO_Route_Survey_SoW_Rev02.pdf"
+generated_date: "2025-12-15"
+notes: "SoW Section 8.3 기반 생성. REVIEW 항목 2개 — 사용 전 확인 필요"
+
+variables:
+  project_code: null      # CLI에서 --var project_code=JAKO2025 로 주입
+  area_code: null          # CLI에서 --var area_code=RS 로 주입
+
+line_list:
+  source: "line_list.csv"
+  line_id_column: "LineName"
+  status_column: "Status"
+  status_filter: "Completed"
+
+folders:
+  - path: "01_Raw_Data/01_SBP"
+    description: "Raw SBP data (SoW 8.3.1)"
+    rules:
+      - type: file_pattern
+        pattern: "*.sgy"
+        naming_regex: "^{project_code}_{area_code}_(?P<line>L\\d{4})_SBP_RAW\\.sgy$"
+      - type: count_match
+        match_to: line_list
+      - type: min_file_size
+        min_bytes: 1024
+
+  - path: "01_Raw_Data/02_MBES"
+    description: "Raw MBES data (SoW 8.3.1)"
+    rules:
+      - type: file_pattern
+        pattern: "*.all"
+        naming_regex: "^{project_code}_{area_code}_(?P<line>L\\d{4})_MBES\\.all$"
+      - type: count_match
+        match_to: line_list
+
+  - path: "02_Processed_Data/01_SBP"
+    description: "Processed SBP SEG-Y (SoW 8.3.2)"
+    rules:
+      - type: file_pattern
+        pattern: "*.sgy"
+        naming_regex: "^{project_code}_{area_code}_(?P<line>L\\d{4})_SBP_PROC\\.sgy$"
+      - type: count_match
+        match_to: line_list
+      - type: segy_header_check
+        check_coordinates: true
+        check_sample_rate: true
+        expected_sample_rate: 4000  # REVIEW: SoW에 샘플레이트 미명시, 4000Hz 가정
+
+  - path: "03_Navigation"
+    description: "Navigation data (SoW 8.3.3)"
+    rules:
+      - type: required_files
+        files:
+          - "{project_code}_Final_Navigation.csv"
+          - "{project_code}_Track_Chart.pdf"
+
+  - path: "04_Reports"
+    description: "Project reports (SoW 8.3.4)"
+    rules:
+      - type: required_files
+        files:
+          - "{project_code}_Processing_Report_Rev*.docx"
+          - "{project_code}_Processing_Report_Rev*.pdf"
+          - "{project_code}_Equipment_Calibration.pdf"
+      - type: no_temp_files
+
+  - path: "05_GIS"
+    description: "GIS deliverables"
+    optional: true
+    rules:
+      - type: required_files
+        files:
+          - "{project_code}_Survey_Area.shp"
+          - "{project_code}_Pipeline_Route.kml"  # REVIEW: SoW에 KML 포맷 요구 여부 불명확
+
+global_rules_extra:
+  - type: no_empty_folders
+  - type: no_zero_byte_files
+  - type: no_temp_files
+```
+
+**CLI 실행 예시:**
+
+```bash
+python -m handover_check.cli validate \
+  --path /d/Projects/JAKO_2025/Delivery/ \
+  --profile ./profiles/generated/JAKO_2025_Route_Survey.yaml \
+  --linelist ./JAKO_2025_linelist.csv \
+  --var project_code=JAKO2025 \
+  --var area_code=RS \
+  --output JAKO2025_report.xlsx
+```
+
+**REVIEW 항목 (2개):**
+1. `02_Processed_Data/01_SBP` > `segy_header_check` > `expected_sample_rate`: SoW에 샘플레이트 미명시, 4000Hz 가정
+2. `05_GIS` > `required_files` > `Pipeline_Route.kml`: SoW에 KML 포맷 요구 여부 불명확
+
+수정이 필요하면 말씀해 주세요.
+
+---
+
+위 형식을 정확히 따르십시오. 블록 순서, 코드블록 구분, REVIEW 목록 형식을 변경하지 마십시오.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 12. 주의사항
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 - YAML 외의 코드(Python, Shell 등)를 생성하지 마십시오.
@@ -335,4 +487,5 @@ SoW/폼에서 명시된 경우에만 추가:
 - variables 섹션의 변수명은 snake_case를 사용하십시오.
 - 하나의 폴더에 동일 type 규칙을 중복 적용하지 마십시오.
 - 사용자가 수정을 요청하면 변경 부분만 보여주고, 이후 전체 YAML도 다시 제공하십시오.
+- `{variable}` 안의 변수명은 반드시 `[a-zA-Z_]`로 시작해야 합니다. 숫자만으로 된 `{4}` 같은 형태는 정규식 quantifier이므로 변수로 취급하지 마십시오.
 ```
