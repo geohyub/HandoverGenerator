@@ -1,6 +1,6 @@
 # ============================================
 # Handover Validation Profile
-# Client: KFW
+# Client: KFW / EBP
 # Project: KFW Offshore Floating Wind Farm Geophysical Survey
 # Generated: 2026-02-10
 # ============================================
@@ -9,43 +9,48 @@ profile_name: "KFW_2026_OfECC_Geophysical"
 base: "base_geoview.yaml"
 client: "KFW"
 project: "KFW Offshore Floating Wind Farm Geophysical Survey - Export Cable Route"
-generated_from: "KRKFW-KFW-GEO-GPH-SOW-00002 + Geophysical Surveys Tech_Specs_v.1_0609.pdf"
+generated_from: "Schedule 2. KRKFW-KFW-GEO-GPH-SOW-00002_Scope of Work.pdf + Geophysical Surveys Tech_Specs_v.1_0609.pdf"
 generated_date: "2026-02-10"
-notes: "SoW Section 7.2 + Tech Specs 기반 생성. REVIEW 항목 7개 - 사용 전 확인 필요"
+notes: "Auto-generated from SoW + Tech Specs. 7 REVIEW items - search # REVIEW comments and verify before use"
 
+# -- Variables --
 variables:
-  project_code: null    # CLI에서 --var project_code=KRKFW 로 주입
-  area_code: null        # CLI에서 --var area_code=ECR 로 주입
+  project_code: null    # Injected via CLI --var
+  area_code: null        # Injected via CLI --var
 
-line_list:  # REVIEW: 라인 리스트 컬럼명 SoW/Tech Specs 미명시
+# -- Line List --
+line_list:  # REVIEW: Line list format/column names not specified in SoW or Tech Specs
   source: "line_list.csv"
-  line_id_column: "LineID"      # REVIEW: 컬럼명 미명시, 일반적 이름 사용
-  status_column: "Status"       # REVIEW: 컬럼명 미명시, 일반적 이름 사용
+  line_id_column: "LineID"      # REVIEW: Column name not specified
+  status_column: "Status"       # REVIEW: Column name not specified
   status_filter: "Completed"
 
-# REVIEW: 폴더 구조 SoW/Tech Specs 미명시, 센서 기반 일반 패턴 적용
+# ============================================
+# Folder Validation Rules
+# ============================================
+# REVIEW: Folder structure not specified in SoW or Tech Specs, default pattern applied
 folders:
 
   # -------------------------------------------------------
   # 01_MBES - Multibeam Echosounder (IHO Order 1a)
   # -------------------------------------------------------
   - path: "01_MBES/Raw"
-    description: "MBES raw data (SoW 7.2)"
+    description: "MBES raw data"
     rules:
       - type: file_pattern
-        pattern: "*.*"  # REVIEW: Raw 확장자 장비별 상이 (*.all, *.kmall 등)
+        pattern: "*.*"  # REVIEW: Raw data extensions vary by acquisition software (*.all, *.kmall, etc.)
 
   - path: "01_MBES/Processed"
-    description: "MBES processed XYZ (SoW 7.2)"
+    description: "MBES processed data - gridded/un-gridded XYZ"
     rules:
       - type: file_pattern
         pattern: "*.xyz"
 
   - path: "01_MBES/Grids/DTM"
-    description: "MBES DTM GeoTIFF 2m/4m (SoW 7.2)"
+    description: "MBES DTM grids - GeoTIFF (2m array / 4m route)"
     rules:
       - type: file_pattern
-        pattern: "*.tif"  # REVIEW: Grid 파일명 패턴 미명시
+        pattern: "*.tif"  # REVIEW: Grid filename patterns not specified
 
   - path: "01_MBES/Grids/TVU"
     description: "MBES Total Vertical Uncertainty grid"
@@ -72,19 +77,19 @@ folders:
         pattern: "*.tif"
 
   - path: "01_MBES/Grids/Contours"
-    description: "MBES depth contours shapefile (SoW 7.2)"
+    description: "MBES depth contours - Shapefile"
     rules:
       - type: file_pattern
         pattern: "*.shp"
 
   - path: "01_MBES/Backscatter"
-    description: "MBES backscatter mosaic (SoW 7.2)"
+    description: "MBES backscatter mosaic"
     rules:
       - type: file_pattern
         pattern: "*.tif"
 
   - path: "01_MBES/Metadata"
-    description: "MBES MEDIN XML metadata (SoW 7.2)"
+    description: "MBES MEDIN XML metadata"
     rules:
       - type: file_pattern
         pattern: "*.xml"
@@ -93,28 +98,28 @@ folders:
   # 02_SSS - Side Scan Sonar (Dual Freq HF/LF)
   # -------------------------------------------------------
   - path: "02_SSS/Raw"
-    description: "SSS raw XTF both channels (SoW 7.2, Tech Specs 10.6)"
+    description: "SSS raw XTF data (both channels)"
     rules:
       - type: file_pattern
         pattern: "*.xtf"
-        naming_regex: "^(?P<line>.+?)\\.xtf$"  # REVIEW: 파일 네이밍 규칙 미명시
+        naming_regex: "^(?P<line>.+?)\\.xtf$"  # REVIEW: File naming convention not specified
       - type: count_match
         match_to: line_list
 
   - path: "02_SSS/Mosaics/HF"
-    description: "SSS HF mosaic GeoTIFF 1x1km tiles (SoW 7.2, Tech Specs 16.1.10)"
+    description: "SSS HF mosaic GeoTIFF - 1x1km tiles"
     rules:
       - type: file_pattern
         pattern: "*.tif"
 
   - path: "02_SSS/Mosaics/LF"
-    description: "SSS LF mosaic GeoTIFF 1x1km tiles (SoW 7.2)"
+    description: "SSS LF mosaic GeoTIFF - 1x1km tiles"
     rules:
       - type: file_pattern
         pattern: "*.tif"
 
   - path: "02_SSS/Contacts"
-    description: "SSS contact list SHP + CSV (Tech Specs 10.6)"
+    description: "SSS contact list - SHP and CSV"
     rules:
       - type: file_pattern
         pattern: "*.shp"
@@ -122,47 +127,47 @@ folders:
         pattern: "*.csv"
 
   - path: "02_SSS/Project"
-    description: "SonarWiz project (SoW 7.2)"
+    description: "SonarWiz project files"
     optional: true
     rules:
       - type: file_pattern
-        pattern: "*.*"  # REVIEW: SonarWiz 프로젝트 파일 패턴 미명시
+        pattern: "*.*"  # REVIEW: Processing software project file patterns not specified
 
   - path: "02_SSS/Metadata"
-    description: "SSS MEDIN XML metadata (SoW 7.2)"
+    description: "SSS MEDIN XML metadata"
     rules:
       - type: file_pattern
         pattern: "*.xml"
 
   # -------------------------------------------------------
-  # 03_SBP - Sub-Bottom Profiler HF (Parametric/Chirp)
+  # 03_SBP - Sub-Bottom Profiler (HF Parametric/Chirp)
   # -------------------------------------------------------
   - path: "03_SBP/Raw"
-    description: "SBP raw full waveform 24-bit SEG-Y (Tech Specs 12)"
+    description: "SBP raw data - full waveform 24-bit SEG-Y"
     rules:
       - type: file_pattern
-        pattern: "*.sgy"  # REVIEW: Raw 확장자 장비별 상이 가능
-        naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: 파일 네이밍 규칙 미명시
+        pattern: "*.sgy"  # REVIEW: Raw data extension may vary by equipment
+        naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: File naming convention not specified
       - type: count_match
         match_to: line_list
       - type: segy_header_check
         check_coordinates: true
-        check_sample_rate: true  # REVIEW: SEG-Y 샘플레이트 값 SoW/Tech Specs 미명시
+        check_sample_rate: true  # REVIEW: SEG-Y sample rate not specified in SoW or Tech Specs
 
   - path: "03_SBP/Processed"
-    description: "SBP processed SEG-Y motion/datum corrected (SoW 7.2)"
+    description: "SBP processed SEG-Y - motion corrected, datum aligned"
     rules:
       - type: file_pattern
         pattern: "*.sgy"
-        naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: 파일 네이밍 규칙 미명시
+        naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: File naming convention not specified
       - type: count_match
         match_to: line_list
       - type: segy_header_check
         check_coordinates: true
-        check_sample_rate: true  # REVIEW: SEG-Y 샘플레이트 값 미명시
+        check_sample_rate: true  # REVIEW: SEG-Y sample rate not specified
 
   - path: "03_SBP/Images"
-    description: "SBP profile images TIFF/PNG (SoW 7.2)"
+    description: "SBP profile images - TIFF/PNG"
     rules:
       - type: file_pattern
         pattern: "*.tif"
@@ -170,21 +175,21 @@ folders:
         pattern: "*.png"
 
   - path: "03_SBP/Interpretation"
-    description: "SBP interpretation CSV - horizons, TWT, Elevation, Depth BSB (SoW 7.2)"
+    description: "SBP interpretation CSV (horizons, TWT, Elevation, Depth BSB)"
     rules:
       - type: file_pattern
         pattern: "*.csv"
 
   - path: "03_SBP/Grids"
-    description: "SBP elevation/BSB/isochore grids GeoTIFF + XYZ 5m (SoW 7.2)"
+    description: "SBP elevation/BSB/isochore grids - GeoTIFF + XYZ (5m)"
     rules:
       - type: file_pattern
-        pattern: "*.tif"  # REVIEW: Grid 파일명 패턴 미명시
+        pattern: "*.tif"  # REVIEW: Grid filename patterns not specified
       - type: file_pattern
         pattern: "*.xyz"
 
   - path: "03_SBP/Metadata"
-    description: "SBP MEDIN XML metadata (SoW 7.2)"
+    description: "SBP MEDIN XML metadata"
     rules:
       - type: file_pattern
         pattern: "*.xml"
@@ -193,31 +198,31 @@ folders:
   # 04_UHRS - Multi-Frequency SBP (Sparker/Boomer)
   # -------------------------------------------------------
   - path: "04_UHRS/Raw"
-    description: "UHRS raw SEG-Y (SoW 7.2)"
+    description: "UHRS raw SEG-Y data"
     rules:
       - type: file_pattern
-        pattern: "*.sgy"  # REVIEW: Raw 확장자 장비별 상이 가능
-        naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: 파일 네이밍 규칙 미명시
+        pattern: "*.sgy"  # REVIEW: Raw data extension may vary by equipment
+        naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: File naming convention not specified
       - type: count_match
         match_to: line_list
       - type: segy_header_check
         check_coordinates: true
-        check_sample_rate: true  # REVIEW: SEG-Y 샘플레이트 값 미명시
+        check_sample_rate: true  # REVIEW: SEG-Y sample rate not specified
 
   - path: "04_UHRS/Processed"
-    description: "UHRS processed SEG-Y motion/datum corrected (SoW 7.2)"
+    description: "UHRS processed SEG-Y - motion corrected, datum aligned"
     rules:
       - type: file_pattern
         pattern: "*.sgy"
-        naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: 파일 네이밍 규칙 미명시
+        naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: File naming convention not specified
       - type: count_match
         match_to: line_list
       - type: segy_header_check
         check_coordinates: true
-        check_sample_rate: true  # REVIEW: SEG-Y 샘플레이트 값 미명시
+        check_sample_rate: true  # REVIEW: SEG-Y sample rate not specified
 
   - path: "04_UHRS/Images"
-    description: "UHRS profile images TIFF/PNG (SoW 7.2)"
+    description: "UHRS profile images - TIFF/PNG"
     rules:
       - type: file_pattern
         pattern: "*.tif"
@@ -225,21 +230,21 @@ folders:
         pattern: "*.png"
 
   - path: "04_UHRS/Interpretation"
-    description: "UHRS interpretation CSV (SoW 7.2)"
+    description: "UHRS interpretation CSV"
     rules:
       - type: file_pattern
         pattern: "*.csv"
 
   - path: "04_UHRS/Grids"
-    description: "UHRS elevation/BSB/isochore grids GeoTIFF + XYZ 5m (SoW 7.2)"
+    description: "UHRS elevation/BSB/isochore grids - GeoTIFF + XYZ (5m)"
     rules:
       - type: file_pattern
-        pattern: "*.tif"  # REVIEW: Grid 파일명 패턴 미명시
+        pattern: "*.tif"  # REVIEW: Grid filename patterns not specified
       - type: file_pattern
         pattern: "*.xyz"
 
   - path: "04_UHRS/Metadata"
-    description: "UHRS MEDIN XML metadata (SoW 7.2)"
+    description: "UHRS MEDIN XML metadata"
     rules:
       - type: file_pattern
         pattern: "*.xml"
@@ -248,7 +253,7 @@ folders:
   # 05_MAG - Magnetometer (Cesium Vapor)
   # -------------------------------------------------------
   - path: "05_MAG/Raw"
-    description: "MAG raw CSV/ASCII (SoW 7.2, Tech Specs 11.6)"
+    description: "MAG raw data - CSV/ASCII"
     rules:
       - type: file_pattern
         pattern: "*.csv"
@@ -256,13 +261,13 @@ folders:
         pattern: "*.ascii"
 
   - path: "05_MAG/Processed"
-    description: "MAG processed CSV (SoW 7.2)"
+    description: "MAG processed data - CSV (Date/Time/E/N/Depth/Alt/Heading/Signal)"
     rules:
       - type: file_pattern
         pattern: "*.csv"
 
   - path: "05_MAG/Grids"
-    description: "MAG altitude/signal/residual grids 0.5m bin (SoW 7.2)"
+    description: "MAG altitude/signal/residual grids (0.5m bin) - GRD/FLT/GeoTIFF"
     rules:
       - type: file_pattern
         pattern: "*.grd"
@@ -270,7 +275,7 @@ folders:
         pattern: "*.tif"
 
   - path: "05_MAG/Contacts"
-    description: "MAG contact list SHP + CSV (Tech Specs 11.6)"
+    description: "MAG contact list - SHP and CSV"
     rules:
       - type: file_pattern
         pattern: "*.shp"
@@ -278,44 +283,44 @@ folders:
         pattern: "*.csv"
 
   - path: "05_MAG/Project"
-    description: "Oasis Montaj project (SoW 7.2)"
+    description: "Oasis Montaj project files (*.gdb)"
     optional: true
     rules:
       - type: file_pattern
-        pattern: "*.gdb"  # REVIEW: Oasis Montaj 프로젝트 파일 패턴 미명시
+        pattern: "*.gdb"  # REVIEW: Processing software project file patterns not specified
 
   - path: "05_MAG/Metadata"
-    description: "MAG MEDIN XML metadata (SoW 7.2)"
+    description: "MAG MEDIN XML metadata"
     rules:
       - type: file_pattern
         pattern: "*.xml"
 
   # -------------------------------------------------------
-  # 06_Kingdom - Kingdom Project (SBP + UHRS)
+  # 06_Kingdom - Kingdom Project (SBP + UHRS combined)
   # -------------------------------------------------------
   - path: "06_Kingdom"
-    description: "Kingdom project TWT + DEPTH domains (SoW 7.2)"
+    description: "Kingdom project - TWT + DEPTH domains"
     optional: true
     rules:
       - type: file_pattern
-        pattern: "*.*"  # REVIEW: Kingdom 프로젝트 파일 패턴 미명시
+        pattern: "*.*"  # REVIEW: Processing software project file patterns not specified
 
   # -------------------------------------------------------
   # 07_SVP - Sound Velocity Profiles
   # -------------------------------------------------------
   - path: "07_SVP"
-    description: "SVP data (SoW 7.2 CSV, Tech Specs 8.5 XLS)"
+    description: "SVP data files"
     rules:
       - type: file_pattern
         pattern: "*.csv"
       - type: file_pattern
-        pattern: "*.xls"
+        pattern: "*.xls"  # Tech Specs Sec 8.5 specifies XLS
 
   # -------------------------------------------------------
   # 08_Navigation - Positioning Data
   # -------------------------------------------------------
   - path: "08_Navigation"
-    description: "Positioning data CSV/TXT/SHP (Tech Specs 7.4)"
+    description: "Positioning data - CSV, TXT, SHP (Tech Specs Sec 7.4)"
     rules:
       - type: file_pattern
         pattern: "*.csv"
@@ -326,7 +331,7 @@ folders:
   # 09_Targets - Combined Target Lists
   # -------------------------------------------------------
   - path: "09_Targets"
-    description: "MBES/SSS/MAG/SBP target picks SHP + XLSX (SoW 7.2)"
+    description: "MBES/SSS/MAG/SBP target picks - SHP + XLSX"
     rules:
       - type: file_pattern
         pattern: "*.shp"
@@ -337,7 +342,7 @@ folders:
   # 10_GIS - SSDM V2 Geodatabase
   # -------------------------------------------------------
   - path: "10_GIS"
-    description: "SSDM V2 Esri ArcGIS geodatabase (SoW 7.2)"
+    description: "SSDM V2 Esri ArcGIS geodatabase + supporting shapefiles"
     rules:
       - type: file_pattern
         pattern: "*.gdb"
@@ -348,7 +353,7 @@ folders:
   # 11_Reports - Reports and Drawings
   # -------------------------------------------------------
   - path: "11_Reports"
-    description: "Survey reports PDF + Word, drawings MXD + DWG (Tech Specs 16.1.6-7)"
+    description: "Survey reports (PDF + MS Word) and drawings (MXD + PDF + DWG)"
     rules:
       - type: file_pattern
         pattern: "*.pdf"
@@ -358,3 +363,11 @@ folders:
         pattern: "*.mxd"
       - type: file_pattern
         pattern: "*.dwg"
+
+# ============================================
+# Extra Global Rules
+# ============================================
+# No additional global rules specified in SoW/Tech Specs
+# (base_geoview.yaml already includes: no_empty_folders, no_zero_byte_files,
+#  no_temp_files, no_duplicate_files, total_size_report)
+global_rules_extra: []

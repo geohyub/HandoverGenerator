@@ -1,3 +1,49 @@
+# Profile Generator 출력 예시
+
+> 아래는 **KFW Offshore Floating Wind Farm Geophysical Survey** SoW를 기반으로
+> Profile Generator Claude가 출력하는 형태의 예시입니다.
+> 실제 다른 채팅에서 SoW PDF 업로드 시 이런 형태로 결과가 나옵니다.
+
+---
+
+## 추출 요약표 (블록 0 — 사용자 확인용)
+
+Claude가 SoW에서 정보를 추출한 뒤 **먼저** 아래 요약표를 보여주고, 사용자 확인 후 YAML을 생성합니다.
+
+---
+
+SoW에서 추출한 정보를 정리했습니다. 확인해 주세요.
+
+| 항목 | 추출 내용 |
+|------|-----------|
+| 클라이언트 | KFW / EBP |
+| 프로젝트명 | KFW Offshore Floating Wind Farm Geophysical Survey - Export Cable Route |
+| 참조 문서 | Schedule 2. KRKFW-KFW-GEO-GPH-SOW-00002 + Geophysical Surveys Tech_Specs_v.1_0609.pdf |
+| 센서 목록 | MBES, SSS, SBP, UHRS(Multi-Freq SBP), MAG |
+| 추가 데이터 | SVP, Navigation, Targets, GIS(SSDM V2), Reports |
+| 폴더 구조 | SoW 미명시 → 센서별 기본 패턴 적용 |
+| 파일 네이밍 | SoW 미명시 → 일반 패턴 적용 |
+| 라인 리스트 | 사용 예상, 컬럼명 미명시 |
+| SEG-Y | 좌표 검증 필요, 샘플레이트 미명시 |
+| MBES 그리드 | DTM, TVU, THU, SD, Density, Contours, Backscatter |
+| GIS | SSDM V2 Esri ArcGIS Geodatabase |
+| 체크섬 | SoW 미명시 |
+
+**REVIEW 필요 항목: 7개** (폴더 구조, 파일 네이밍, 라인 리스트 컬럼, SEG-Y 샘플레이트, Raw 확장자, 그리드 패턴, 프로젝트 파일 패턴)
+
+위 내용이 맞으면 YAML 프로파일을 생성하겠습니다. 수정할 부분이 있으면 말씀해 주세요.
+
+---
+
+(사용자가 "확인" 또는 "ㅇㅇ" 등으로 응답하면 아래 3개 블록을 출력합니다)
+
+---
+
+## 최종 출력 (블록 1 + 2 + 3)
+
+**파일명: `KFW_2026_OfECC_Geophysical.yaml`**
+
+```yaml
 # ============================================
 # Handover Validation Profile
 # Client: KFW / EBP
@@ -15,8 +61,8 @@ notes: "Auto-generated from SoW + Tech Specs. 7 REVIEW items - search # REVIEW c
 
 # -- Variables --
 variables:
-  project_code: null    # Injected via CLI --var
-  area_code: null        # Injected via CLI --var
+  project_code: null    # CLI에서 --var project_code=KFW2026 으로 주입
+  area_code: null        # CLI에서 --var area_code=OfECC 로 주입
 
 # -- Line List --
 line_list:  # REVIEW: Line list format/column names not specified in SoW or Tech Specs
@@ -146,7 +192,7 @@ folders:
     description: "SBP raw data - full waveform 24-bit SEG-Y"
     rules:
       - type: file_pattern
-        pattern: "*.sgy"  # REVIEW: Raw data extension may vary by equipment
+        pattern: "*.sgy"
         naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: File naming convention not specified
       - type: count_match
         match_to: line_list
@@ -201,7 +247,7 @@ folders:
     description: "UHRS raw SEG-Y data"
     rules:
       - type: file_pattern
-        pattern: "*.sgy"  # REVIEW: Raw data extension may vary by equipment
+        pattern: "*.sgy"
         naming_regex: "^(?P<line>.+?)\\.sgy$"  # REVIEW: File naming convention not specified
       - type: count_match
         match_to: line_list
@@ -363,11 +409,35 @@ folders:
         pattern: "*.mxd"
       - type: file_pattern
         pattern: "*.dwg"
+```
 
-# ============================================
-# Extra Global Rules
-# ============================================
-# No additional global rules specified in SoW/Tech Specs
-# (base_geoview.yaml already includes: no_empty_folders, no_zero_byte_files,
-#  no_temp_files, no_duplicate_files, total_size_report)
-global_rules_extra: []
+(base의 global_rules로 충분하므로 global_rules_extra를 생략합니다.)
+
+**CLI 실행 예시:**
+
+```bash
+handover-check validate \
+  --path /d/Projects/KFW_2026/Delivery/ \
+  --profile ./profiles/generated/KFW_2026_OfECC_Geophysical.yaml \
+  --linelist ./KFW_2026_linelist.csv \
+  --var project_code=KFW2026 \
+  --var area_code=OfECC \
+  --output KFW2026_report.xlsx
+```
+
+**REVIEW 항목 (7개):**
+1. `line_list` > `line_id_column` / `status_column`: Line list 컬럼명이 SoW/Tech Specs에 미명시
+2. `folders`: 전체 폴더 구조가 SoW에 미명시, 센서별 기본 패턴 적용
+3. `01_MBES/Raw` > `file_pattern`: Raw 확장자가 장비별로 다름 (*.all, *.kmall 등)
+4. `01_MBES/Grids/DTM` > `file_pattern`: 그리드 파일명 패턴 미명시
+5. `02_SSS/Raw`, `03_SBP/Raw/Processed`, `04_UHRS/Raw/Processed` > `naming_regex`: 파일 네이밍 규칙 미명시
+6. `03_SBP/Raw`, `04_UHRS/Raw/Processed` > `segy_header_check`: SEG-Y 샘플레이트 미명시
+7. `02_SSS/Project`, `05_MAG/Project`, `06_Kingdom` > `file_pattern`: 처리 소프트웨어 프로젝트 파일 패턴 미명시
+
+수정이 필요하면 말씀해 주세요.
+
+---
+
+> **참고**: 위 출력은 Profile Generator Claude가 SoW PDF를 분석한 후 생성하는 실제 출력 형태입니다.
+> 사용자는 YAML 코드블록을 복사하여 `profiles/generated/KFW_2026_OfECC_Geophysical.yaml`로 저장한 뒤
+> CLI 명령어를 실행하면 됩니다.
