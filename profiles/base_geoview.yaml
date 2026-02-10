@@ -1,0 +1,44 @@
+profile_name: "GeoView_Base_Standard"
+version: "1.0"
+description: "GeoView internal default deliverable structure"
+
+folders:
+  - path: "01_Raw_Data"
+    description: "Raw survey data"
+    rules:
+      - type: no_zero_byte_files
+      - type: no_temp_files
+
+  - path: "02_Processed_Data"
+    description: "Processed data"
+    rules:
+      - type: no_zero_byte_files
+      - type: file_pattern
+        pattern: "*.sgy"
+
+  - path: "03_Navigation"
+    description: "Navigation and positioning data"
+    rules:
+      - type: file_pattern
+        pattern: "*.csv"
+
+  - path: "04_Reports"
+    description: "Project reports and documents"
+    rules:
+      - type: required_files
+        files:
+          - "*Report*Rev*.docx"
+          - "*Report*Rev*.pdf"
+      - type: no_temp_files
+
+  - path: "05_Miscellaneous"
+    optional: true
+    description: "Optional supplementary data"
+
+global_rules:
+  - type: no_empty_folders
+  - type: no_zero_byte_files
+  - type: no_temp_files
+    patterns: ["~$*", "Thumbs.db", ".DS_Store", "*.tmp", "*.bak", "desktop.ini"]
+  - type: no_duplicate_files
+  - type: total_size_report

@@ -1,0 +1,8 @@
+# Common global rules (includable by project profiles)
+global_rules:
+  - type: no_empty_folders
+  - type: no_zero_byte_files
+  - type: no_temp_files
+    patterns: ["~$*", "Thumbs.db", ".DS_Store", "*.tmp", "*.bak", "desktop.ini"]
+  - type: no_duplicate_files
+  - type: total_size_report
