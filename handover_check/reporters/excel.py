@@ -1,23 +1,35 @@
-"""Excel detailed report generation with 5 tabs."""
+"""Excel readiness report generation."""
 
 from pathlib import Path
+from typing import Optional, Tuple
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from handover_check.models import ResultStatus, ValidationReport
+from handover_check.i18n import normalize_lang, severity_text, status_text, tr
+from handover_check.insights import build_readiness_insight
+from handover_check.models import FolderResult, ResultStatus, ValidationReport
 from handover_check.validators.total_size import format_size
 
 
-# Style constants
+TITLE_FONT = Font(bold=True, color="FFFFFF", size=14)
+SECTION_TITLE_FONT = Font(bold=True, color="1F1F1F", size=12)
+SUBTITLE_FONT = Font(bold=True, color="1F1F1F", size=11)
 HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
+BODY_FONT = Font(size=10)
+TITLE_FILL = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+SECTION_FILL = PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid")
 HEADER_FILL = PatternFill(start_color="2F5496", end_color="2F5496", fill_type="solid")
 PASS_FILL = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
 FAIL_FILL = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 WARN_FILL = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
 SKIP_FILL = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
 INFO_FILL = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
+BLOCKER_FILL = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
+MAJOR_FILL = PatternFill(start_color="FCE5CD", end_color="FCE5CD", fill_type="solid")
+MINOR_FILL = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 THIN_BORDER = Border(
     left=Side(style="thin"),
     right=Side(style="thin"),
@@ -34,249 +46,483 @@ STATUS_FILLS = {
     ResultStatus.INFO: INFO_FILL,
 }
 
+SEVERITY_FILLS = {
+    "Blocker": BLOCKER_FILL,
+    "Major": MAJOR_FILL,
+    "Minor": MINOR_FILL,
+    "Info": INFO_FILL,
+}
+
+
+def _report_lang(report: ValidationReport) -> str:
+    return normalize_lang(getattr(report, "language", "en"))
+
+
+def _write_cell(ws, row, column, value, fill=None, font=None, alignment=None):
+    cell = ws.cell(row=row, column=column, value=value)
+    cell.border = THIN_BORDER
+    cell.font = font or BODY_FONT
+    cell.alignment = alignment or WRAP_ALIGNMENT
+    if fill:
+        cell.fill = fill
+    return cell
+
 
 def _write_header(ws, headers, row=1):
-    """Write header row with formatting."""
     for col, header in enumerate(headers, 1):
-        cell = ws.cell(row=row, column=col, value=header)
-        cell.font = HEADER_FONT
-        cell.fill = HEADER_FILL
-        cell.border = THIN_BORDER
-        cell.alignment = Alignment(horizontal="center", vertical="center")
+        _write_cell(
+            ws,
+            row,
+            col,
+            header,
+            fill=HEADER_FILL,
+            font=HEADER_FONT,
+            alignment=Alignment(horizontal="center", vertical="center"),
+        )
+
+
+def _section_title(ws, row, title, end_col=6):
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=end_col)
+    cell = ws.cell(row=row, column=1, value=title)
+    cell.font = SECTION_TITLE_FONT
+    cell.fill = SECTION_FILL
+    cell.alignment = Alignment(vertical="center")
+    cell.border = THIN_BORDER
 
 
 def _auto_width(ws, min_width=10, max_width=60):
-    """Auto-adjust column widths."""
-    for col in ws.columns:
+    for col in ws.iter_cols():
+        first_real_cell = next(
+            (cell for cell in col if not isinstance(cell, MergedCell)),
+            None,
+        )
+        if first_real_cell is None:
+            continue
         max_len = 0
-        col_letter = get_column_letter(col[0].column)
+        col_letter = get_column_letter(first_real_cell.column)
         for cell in col:
-            if cell.value:
+            if isinstance(cell, MergedCell):
+                continue
+            if cell.value is not None:
                 max_len = max(max_len, len(str(cell.value)))
         adjusted = min(max(max_len + 2, min_width), max_width)
         ws.column_dimensions[col_letter].width = adjusted
 
 
+def _extract_count_info(folder_result: FolderResult) -> Tuple[str, str]:
+    for rule_result in folder_result.rule_results:
+        if rule_result.rule_type != "count_match":
+            continue
+        message = rule_result.message
+        if "/" not in message:
+            continue
+        left, right = message.split("/", 1)
+        found = left.strip()
+        expected = right.split(" ", 1)[0].strip()
+        return found, expected
+    return "", ""
+
+
+def _sheet_title(ws, title):
+    ws.merge_cells("A1:F1")
+    title_cell = ws["A1"]
+    title_cell.value = title
+    title_cell.font = TITLE_FONT
+    title_cell.fill = TITLE_FILL
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+    title_cell.border = THIN_BORDER
+    ws.row_dimensions[1].height = 24
+
+
 def _write_summary_tab(wb, report: ValidationReport):
-    """Tab 1: Summary — folder-level overview."""
+    lang = _report_lang(report)
+    insight = build_readiness_insight(report, lang)
+    section_lookup = {
+        section["scope"]: section for section in insight.section_overview
+    }
     ws = wb.active
-    ws.title = "Summary"
+    ws.title = tr("sheet_summary", lang)
+    _sheet_title(ws, tr("summary_title", lang))
 
-    headers = ["Folder", "Status", "Files Found", "Files Expected", "Issues"]
-    _write_header(ws, headers)
+    row = 3
+    _section_title(ws, row, tr("section_executive_readiness", lang))
+    row += 1
 
-    row = 2
-    for fr in report.folder_results:
-        status = fr.status
-
-        # Count files found
-        files_found = ""
-        files_expected = ""
-        issues_text = ""
-
-        for rr in fr.rule_results:
-            if rr.rule_type == "count_match" and rr.status != ResultStatus.SKIP:
-                parts = rr.message.split("/")
-                if len(parts) == 2:
-                    files_found = parts[0]
-                    files_expected = parts[1].split(" ")[0]
-            if rr.status in (ResultStatus.FAIL, ResultStatus.WARNING):
-                if issues_text:
-                    issues_text += "; "
-                issues_text += rr.message
-
-        if not files_found:
-            # Count actual files in inventory
-            count = sum(
-                1 for fi in report.file_inventory
-                if fi.folder == fr.path or fi.folder.startswith(fr.path + "/")
-            )
-            files_found = str(count) if count > 0 else ""
-
-        ws.cell(row=row, column=1, value=fr.path).border = THIN_BORDER
-        status_cell = ws.cell(row=row, column=2, value=status.value)
-        status_cell.fill = STATUS_FILLS.get(status, SKIP_FILL)
-        status_cell.border = THIN_BORDER
-        ws.cell(row=row, column=3, value=files_found).border = THIN_BORDER
-        ws.cell(row=row, column=4, value=files_expected).border = THIN_BORDER
-        ws.cell(row=row, column=5, value=issues_text or "\u2014").border = THIN_BORDER
-        ws[f"E{row}"].alignment = WRAP_ALIGNMENT
+    summary_rows = [
+        (tr("readiness_label", lang), insight.readiness_label),
+        (tr("readiness_score", lang), f"{insight.readiness_percent}%"),
+        (tr("overall_status", lang), status_text(report.overall_status.value, lang)),
+        (tr("headline", lang), insight.headline),
+        (tr("project", lang), report.project or tr("na", lang)),
+        (tr("client", lang), report.client or tr("na", lang)),
+        (tr("profile", lang), report.profile_name),
+        (tr("delivery_path", lang), report.delivery_path),
+        (tr("validated_on", lang), report.timestamp),
+        (tr("total_files", lang), f"{report.total_files:,}"),
+        (tr("total_size", lang), format_size(report.total_size_bytes)),
+        (
+            tr("check_mix", lang),
+            f"{insight.passed_checks} {tr('passed', lang)}, "
+            f"{insight.warning_checks} {tr('warnings', lang)}, "
+            f"{insight.failed_checks} {tr('failed', lang)}, "
+            f"{insight.skipped_checks} {tr('skipped', lang)}",
+        ),
+        (
+            tr("severity_mix", lang),
+            f"{insight.blocker_count} {severity_text('Blocker', lang)}, "
+            f"{insight.major_count} {severity_text('Major', lang)}, "
+            f"{insight.minor_count} {severity_text('Minor', lang)}",
+        ),
+    ]
+    for label, value in summary_rows:
+        _write_cell(ws, row, 1, label, fill=SECTION_FILL, font=SUBTITLE_FONT)
+        _write_cell(ws, row, 2, value)
         row += 1
 
-    # Global rules
-    for gr in report.global_results:
-        ws.cell(row=row, column=1, value=f"GLOBAL: {gr.rule_type}").border = THIN_BORDER
-        status_cell = ws.cell(row=row, column=2, value=gr.status.value)
-        status_cell.fill = STATUS_FILLS.get(gr.status, SKIP_FILL)
-        status_cell.border = THIN_BORDER
-        ws.cell(row=row, column=3, value="").border = THIN_BORDER
-        ws.cell(row=row, column=4, value="").border = THIN_BORDER
-        detail_text = gr.message
-        if gr.details:
-            detail_text += f" ({len(gr.details)} items)"
-        ws.cell(row=row, column=5, value=detail_text).border = THIN_BORDER
+    if insight.coverage:
+        coverage = insight.coverage
+        _write_cell(ws, row, 1, tr("line_coverage", lang), fill=SECTION_FILL, font=SUBTITLE_FONT)
+        _write_cell(
+            ws,
+            row,
+            2,
+            f"{coverage.fully_covered_lines}/{coverage.expected_lines} "
+            f"{tr('fully_covered_lines', lang).lower()} ({coverage.fully_covered_percent}%)",
+        )
+        row += 1
+
+    row += 1
+    _section_title(ws, row, tr("section_validation_basis", lang))
+    row += 1
+    basis_rows = [
+        (tr("base_profile", lang), report.base_profile or tr("direct_profile", lang)),
+        (tr("profile_description", lang), report.profile_description or tr("na", lang)),
+        (tr("profile_notes", lang), report.profile_notes or tr("na", lang)),
+        (tr("line_list_source", lang), report.line_list_source or tr("not_used", lang)),
+        (tr("line_id_column", lang), report.line_id_column or tr("na", lang)),
+        (
+            tr("line_filter", lang),
+            (
+                f"{report.line_status_column} == {report.line_status_filter}"
+                if report.line_status_column and report.line_status_filter
+                else tr("no_status_filter", lang)
+            ),
+        ),
+        (
+            tr("resolved_variables", lang),
+            ", ".join(
+                f"{key}={value or '<empty>'}"
+                for key, value in sorted(report.resolved_variables.items())
+            ) or tr("none", lang),
+        ),
+    ]
+    for label, value in basis_rows:
+        _write_cell(ws, row, 1, label, fill=SECTION_FILL, font=SUBTITLE_FONT)
+        _write_cell(ws, row, 2, value)
+        row += 1
+
+    row += 1
+    _section_title(ws, row, tr("section_next_actions", lang))
+    row += 1
+    if insight.top_actions:
+        for action in insight.top_actions:
+            _write_cell(ws, row, 1, tr("action_label", lang), fill=SECTION_FILL, font=SUBTITLE_FONT)
+            _write_cell(ws, row, 2, action)
+            row += 1
+    else:
+        _write_cell(ws, row, 1, tr("action_label", lang), fill=SECTION_FILL, font=SUBTITLE_FONT)
+        _write_cell(ws, row, 2, tr("no_corrective_actions", lang))
+        row += 1
+
+    row += 1
+    _section_title(ws, row, tr("section_trust_notes", lang))
+    row += 1
+    if insight.trust_notes:
+        for note in insight.trust_notes:
+            _write_cell(ws, row, 1, tr("note_label", lang), fill=SECTION_FILL, font=SUBTITLE_FONT)
+            _write_cell(ws, row, 2, note)
+            row += 1
+    else:
+        _write_cell(ws, row, 1, tr("note_label", lang), fill=SECTION_FILL, font=SUBTITLE_FONT)
+        _write_cell(ws, row, 2, tr("no_trust_caveats", lang))
+        row += 1
+
+    row += 1
+    _section_title(ws, row, tr("section_overview", lang))
+    row += 1
+    headers = [
+        tr("col_section", lang),
+        tr("col_description", lang),
+        tr("col_required", lang),
+        tr("col_status", lang),
+        tr("col_files_found", lang),
+        tr("col_files_expected", lang),
+        tr("col_primary_finding", lang),
+    ]
+    _write_header(ws, headers, row=row)
+    row += 1
+
+    for folder_result in report.folder_results:
+        files_found, files_expected = _extract_count_info(folder_result)
+        if not files_found:
+            file_count = sum(
+                1
+                for file_info in report.file_inventory
+                if file_info.folder == folder_result.path
+                or file_info.folder.startswith(folder_result.path + "/")
+            )
+            files_found = str(file_count) if file_count else ""
+        overview = section_lookup.get(folder_result.path, {})
+        primary_finding = overview.get("primary_message") or tr("no_issues_raised", lang)
+
+        _write_cell(ws, row, 1, folder_result.path)
+        _write_cell(ws, row, 2, folder_result.description or tr("na", lang))
+        _write_cell(ws, row, 3, tr("no", lang) if folder_result.optional else tr("yes", lang))
+        _write_cell(
+            ws,
+            row,
+            4,
+            status_text(folder_result.status.value, lang),
+            fill=STATUS_FILLS.get(folder_result.status, INFO_FILL),
+        )
+        _write_cell(ws, row, 5, files_found)
+        _write_cell(ws, row, 6, files_expected)
+        _write_cell(ws, row, 7, primary_finding)
         row += 1
 
     _auto_width(ws)
 
 
 def _write_issues_tab(wb, report: ValidationReport):
-    """Tab 2: Issues — detailed list of all non-PASS results."""
-    ws = wb.create_sheet("Issues")
-    headers = ["#", "Folder", "Rule", "Status", "Description", "File(s)"]
-    _write_header(ws, headers)
+    lang = _report_lang(report)
+    insight = build_readiness_insight(report, lang)
+    ws = wb.create_sheet(tr("sheet_issues", lang))
+    _sheet_title(ws, tr("issues_title", lang))
 
-    row = 2
-    issue_num = 1
+    row = 3
+    _section_title(ws, row, tr("section_issue_summary", lang), end_col=5)
+    row += 1
+    summary_rows = [
+        (tr("total_issues", lang), len(insight.issues)),
+        (severity_text("Blocker", lang), insight.blocker_count),
+        (severity_text("Major", lang), insight.major_count),
+        (severity_text("Minor", lang), insight.minor_count),
+        (tr("impacted_sections", lang), insight.impacted_sections),
+    ]
+    for label, value in summary_rows:
+        _write_cell(ws, row, 1, label, fill=SECTION_FILL, font=SUBTITLE_FONT)
+        _write_cell(ws, row, 2, value)
+        row += 1
 
-    for fr in report.folder_results:
-        for rr in fr.rule_results:
-            if rr.status in (ResultStatus.FAIL, ResultStatus.WARNING):
-                ws.cell(row=row, column=1, value=issue_num).border = THIN_BORDER
-                ws.cell(row=row, column=2, value=fr.path).border = THIN_BORDER
-                ws.cell(row=row, column=3, value=rr.rule_type).border = THIN_BORDER
-                status_cell = ws.cell(row=row, column=4, value=rr.status.value)
-                status_cell.fill = STATUS_FILLS.get(rr.status, SKIP_FILL)
-                status_cell.border = THIN_BORDER
-                ws.cell(row=row, column=5, value=rr.message).border = THIN_BORDER
-                files_text = "\n".join(rr.details[:20])
-                if len(rr.details) > 20:
-                    files_text += f"\n... +{len(rr.details) - 20} more"
-                ws.cell(row=row, column=6, value=files_text).border = THIN_BORDER
-                ws[f"F{row}"].alignment = WRAP_ALIGNMENT
-                row += 1
-                issue_num += 1
+    row += 1
+    headers = [
+        "#",
+        tr("col_severity", lang),
+        tr("col_section", lang),
+        tr("col_check", lang),
+        tr("col_category", lang),
+        tr("col_status", lang),
+        tr("col_finding", lang),
+        tr("recommendation", lang),
+        tr("col_evidence", lang),
+    ]
+    _write_header(ws, headers, row=row)
+    row += 1
 
-    for gr in report.global_results:
-        if gr.status in (ResultStatus.FAIL, ResultStatus.WARNING):
-            ws.cell(row=row, column=1, value=issue_num).border = THIN_BORDER
-            ws.cell(row=row, column=2, value="(global)").border = THIN_BORDER
-            ws.cell(row=row, column=3, value=gr.rule_type).border = THIN_BORDER
-            status_cell = ws.cell(row=row, column=4, value=gr.status.value)
-            status_cell.fill = STATUS_FILLS.get(gr.status, SKIP_FILL)
-            status_cell.border = THIN_BORDER
-            ws.cell(row=row, column=5, value=gr.message).border = THIN_BORDER
-            files_text = "\n".join(gr.details[:20])
-            if len(gr.details) > 20:
-                files_text += f"\n... +{len(gr.details) - 20} more"
-            ws.cell(row=row, column=6, value=files_text).border = THIN_BORDER
-            ws[f"F{row}"].alignment = WRAP_ALIGNMENT
+    if insight.issues:
+        for index, issue in enumerate(insight.issues, 1):
+            evidence_text = "\n".join(issue.details[:12])
+            if len(issue.details) > 12:
+                evidence_text += f"\n... +{len(issue.details) - 12} more"
+
+            _write_cell(ws, row, 1, index)
+            _write_cell(
+                ws,
+                row,
+                2,
+                severity_text(issue.severity, lang),
+                fill=SEVERITY_FILLS.get(issue.severity, INFO_FILL),
+            )
+            _write_cell(ws, row, 3, issue.scope)
+            _write_cell(ws, row, 4, issue.check_label)
+            _write_cell(ws, row, 5, issue.category)
+            _write_cell(
+                ws,
+                row,
+                6,
+                status_text(issue.status.value, lang),
+                fill=STATUS_FILLS.get(issue.status, INFO_FILL),
+            )
+            _write_cell(ws, row, 7, issue.message)
+            _write_cell(ws, row, 8, issue.action_hint)
+            _write_cell(ws, row, 9, evidence_text or tr("see_message", lang))
             row += 1
-            issue_num += 1
-
-    if issue_num == 1:
-        ws.cell(row=2, column=1, value="No issues found")
+    else:
+        _write_cell(ws, row, 1, tr("no_issues_found", lang))
 
     _auto_width(ws)
 
 
 def _write_line_coverage_tab(wb, report: ValidationReport):
-    """Tab 3: Line Coverage Matrix."""
-    ws = wb.create_sheet("Line Coverage")
+    lang = _report_lang(report)
+    ws = wb.create_sheet(tr("sheet_line_coverage", lang))
+    _sheet_title(ws, tr("line_coverage_title", lang))
 
-    if not report.line_coverage:
-        ws.cell(row=1, column=1, value="No line list used — line coverage not available")
+    insight = build_readiness_insight(report, lang)
+    coverage = insight.coverage
+    row = 3
+
+    if not report.line_coverage or not coverage:
+        _write_cell(
+            ws,
+            row,
+            1,
+            tr("no_line_coverage", lang),
+            fill=SECTION_FILL,
+            font=SUBTITLE_FONT,
+        )
         return
 
-    coverage = report.line_coverage
-    folders = coverage["folders"]
-    lines = coverage["lines"]
-    matrix = coverage["matrix"]
+    _section_title(ws, row, tr("section_coverage_summary", lang))
+    row += 1
+    summary_rows = [
+        (tr("expected_lines", lang), coverage.expected_lines),
+        (tr("tracked_folders", lang), coverage.tracked_folders),
+        (
+            tr("fully_covered_lines", lang),
+            f"{coverage.fully_covered_lines}/{coverage.expected_lines} ({coverage.fully_covered_percent}%)",
+        ),
+        (
+            tr("missing_lines", lang),
+            ", ".join(coverage.missing_lines[:10]) or tr("none", lang),
+        ),
+    ]
+    for label, value in summary_rows:
+        _write_cell(ws, row, 1, label, fill=SECTION_FILL, font=SUBTITLE_FONT)
+        _write_cell(ws, row, 2, value)
+        row += 1
 
-    # Headers
-    headers = ["Line"] + folders
-    _write_header(ws, headers)
+    row += 1
+    _section_title(ws, row, tr("section_matrix", lang), end_col=1 + len(report.line_coverage["folders"]))
+    row += 1
 
-    row = 2
-    check_mark = "\u2713"
-    cross_mark = "\u2717"
+    folders = report.line_coverage["folders"]
+    lines = report.line_coverage["lines"]
+    matrix = report.line_coverage["matrix"]
+
+    headers = [tr("col_line", lang)] + folders
+    _write_header(ws, headers, row=row)
+    row += 1
+
     for line in lines:
-        ws.cell(row=row, column=1, value=line).border = THIN_BORDER
-        for col_idx, folder in enumerate(folders, 2):
+        _write_cell(ws, row, 1, line)
+        for column_index, folder in enumerate(folders, 2):
             found = matrix.get(line, {}).get(folder, False)
-            cell = ws.cell(row=row, column=col_idx)
-            if found:
-                cell.value = check_mark
-                cell.fill = PASS_FILL
-            else:
-                cell.value = cross_mark
-                cell.fill = FAIL_FILL
-            cell.border = THIN_BORDER
-            cell.alignment = Alignment(horizontal="center")
+            _write_cell(
+                ws,
+                row,
+                column_index,
+                tr("ok", lang) if found else tr("missing", lang),
+                fill=PASS_FILL if found else FAIL_FILL,
+                alignment=Alignment(horizontal="center", vertical="center"),
+            )
         row += 1
 
     _auto_width(ws)
 
 
 def _write_file_inventory_tab(wb, report: ValidationReport):
-    """Tab 4: File Inventory — complete file listing."""
-    ws = wb.create_sheet("File Inventory")
-    headers = ["#", "Folder", "Filename", "Size (MB)", "Modified", "Naming OK", "Notes"]
-    _write_header(ws, headers)
+    lang = _report_lang(report)
+    ws = wb.create_sheet(tr("sheet_file_inventory", lang))
+    _sheet_title(ws, tr("file_inventory_title", lang))
+    row = 3
+    headers = [
+        "#",
+        tr("col_folder", lang),
+        tr("col_filename", lang),
+        tr("col_size_mb", lang),
+        tr("col_modified", lang),
+        tr("col_naming_ok", lang),
+        tr("col_notes", lang),
+    ]
+    _write_header(ws, headers, row=row)
+    row += 1
 
-    row = 2
-    for idx, fi in enumerate(report.file_inventory, 1):
-        ws.cell(row=row, column=1, value=idx).border = THIN_BORDER
-        ws.cell(row=row, column=2, value=fi.folder).border = THIN_BORDER
-        ws.cell(row=row, column=3, value=fi.filename).border = THIN_BORDER
-        size_mb = fi.size_bytes / (1024 * 1024)
-        ws.cell(row=row, column=4, value=round(size_mb, 2)).border = THIN_BORDER
-        ws.cell(row=row, column=5, value=fi.modified).border = THIN_BORDER
+    for index, file_info in enumerate(report.file_inventory, 1):
+        _write_cell(ws, row, 1, index)
+        _write_cell(ws, row, 2, file_info.folder)
+        _write_cell(ws, row, 3, file_info.filename)
+        _write_cell(ws, row, 4, round(file_info.size_bytes / (1024 * 1024), 2))
+        _write_cell(ws, row, 5, file_info.modified)
 
-        naming_cell = ws.cell(row=row, column=6)
-        if fi.naming_ok is True:
-            naming_cell.value = check_mark if 'check_mark' in dir() else "\u2713"
-            naming_cell.fill = PASS_FILL
-        elif fi.naming_ok is False:
-            naming_cell.value = "\u2717"
-            naming_cell.fill = FAIL_FILL
-        else:
-            naming_cell.value = "\u2014"
-        naming_cell.border = THIN_BORDER
-        naming_cell.alignment = Alignment(horizontal="center")
-
-        ws.cell(row=row, column=7, value=fi.notes).border = THIN_BORDER
+        naming_value = tr("na", lang)
+        naming_fill = INFO_FILL
+        if file_info.naming_ok is True:
+            naming_value = tr("ok", lang)
+            naming_fill = PASS_FILL
+        elif file_info.naming_ok is False:
+            naming_value = tr("no", lang)
+            naming_fill = FAIL_FILL
+        _write_cell(
+            ws,
+            row,
+            6,
+            naming_value,
+            fill=naming_fill,
+            alignment=Alignment(horizontal="center", vertical="center"),
+        )
+        _write_cell(ws, row, 7, file_info.notes)
         row += 1
 
-        # Limit rows for very large inventories
-        if idx >= 10000:
-            ws.cell(row=row, column=1, value="...")
-            ws.cell(row=row, column=2, value=f"Truncated at 10,000 files (total: {len(report.file_inventory)})")
+        if index >= 10000:
+            _write_cell(ws, row, 1, "...")
+            _write_cell(
+                ws,
+                row,
+                2,
+                tr("truncated_inventory", lang, count=len(report.file_inventory)),
+            )
             break
 
     _auto_width(ws)
 
 
 def _write_naming_violations_tab(wb, report: ValidationReport):
-    """Tab 5: Naming Violations."""
-    ws = wb.create_sheet("Naming Violations")
-    headers = ["#", "Folder", "Filename", "Expected Pattern", "Issue"]
-    _write_header(ws, headers)
+    lang = _report_lang(report)
+    ws = wb.create_sheet(tr("sheet_naming_violations", lang))
+    _sheet_title(ws, tr("naming_violations_title", lang))
+    row = 3
+    headers = [
+        "#",
+        tr("col_folder", lang),
+        tr("col_filename", lang),
+        tr("col_expected_pattern", lang),
+        tr("col_issue", lang),
+    ]
+    _write_header(ws, headers, row=row)
+    row += 1
 
-    row = 2
-    for idx, violation in enumerate(report.naming_violations, 1):
-        ws.cell(row=row, column=1, value=idx).border = THIN_BORDER
-        ws.cell(row=row, column=2, value=violation.get("folder", "")).border = THIN_BORDER
-        ws.cell(row=row, column=3, value=violation.get("filename", "")).border = THIN_BORDER
-        ws.cell(row=row, column=4, value=violation.get("expected_pattern", "")).border = THIN_BORDER
-        ws[f"D{row}"].alignment = WRAP_ALIGNMENT
-        ws.cell(row=row, column=5, value=violation.get("issue", "")).border = THIN_BORDER
-        row += 1
-
-    if not report.naming_violations:
-        ws.cell(row=2, column=1, value="No naming violations found")
+    if report.naming_violations:
+        for index, violation in enumerate(report.naming_violations, 1):
+            _write_cell(ws, row, 1, index)
+            _write_cell(ws, row, 2, violation.get("folder", ""))
+            _write_cell(ws, row, 3, violation.get("filename", ""))
+            _write_cell(ws, row, 4, violation.get("expected_pattern", ""))
+            _write_cell(ws, row, 5, violation.get("issue", ""))
+            row += 1
+    else:
+        _write_cell(ws, row, 1, tr("no_issues_found", lang))
 
     _auto_width(ws)
 
 
 def generate_excel_report(report: ValidationReport, output_path: Path) -> None:
-    """Generate the full Excel report with all 5 tabs."""
-    wb = Workbook()
+    """Generate the full Excel report."""
 
+    wb = Workbook()
     _write_summary_tab(wb, report)
     _write_issues_tab(wb, report)
     _write_line_coverage_tab(wb, report)
     _write_file_inventory_tab(wb, report)
     _write_naming_violations_tab(wb, report)
-
     wb.save(str(output_path))

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 class ResultStatus(Enum):
@@ -67,6 +67,15 @@ class ValidationReport:
     project: Optional[str]
     delivery_path: str
     timestamp: str
+    language: str = "en"
+    base_profile: Optional[str] = None
+    profile_description: Optional[str] = None
+    profile_notes: Optional[str] = None
+    resolved_variables: Dict[str, str] = field(default_factory=dict)
+    line_list_source: Optional[str] = None
+    line_id_column: Optional[str] = None
+    line_status_column: Optional[str] = None
+    line_status_filter: Optional[str] = None
     folder_results: List[FolderResult] = field(default_factory=list)
     global_results: List[RuleResult] = field(default_factory=list)
     file_inventory: List[FileInfo] = field(default_factory=list)

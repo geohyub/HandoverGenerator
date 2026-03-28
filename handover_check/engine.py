@@ -11,6 +11,7 @@ from handover_check.config import (
     resolve_variables,
     substitute_in_rules,
 )
+from handover_check.i18n import normalize_lang
 from handover_check.line_matcher import LineMatcher, LineMatchError
 from handover_check.models import (
     FileInfo,
@@ -34,6 +35,7 @@ class ValidationEngine:
         cli_vars: Optional[Dict[str, str]] = None,
         basic: bool = False,
         folder_filter: Optional[str] = None,
+        language: str = "en",
     ):
         self.delivery_path = delivery_path.resolve()
         self.profile_path = profile_path
@@ -41,6 +43,7 @@ class ValidationEngine:
         self.cli_vars = cli_vars or {}
         self.basic = basic
         self.folder_filter = folder_filter
+        self.language = normalize_lang(language)
 
         if not self.delivery_path.exists():
             raise ConfigError(f"Delivery path not found: {self.delivery_path}")
@@ -135,7 +138,23 @@ class ValidationEngine:
             project=profile.get("project"),
             delivery_path=str(self.delivery_path),
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            language=self.language,
+            base_profile=profile.get("base"),
+            profile_description=profile.get("description"),
+            profile_notes=profile.get("notes"),
+            resolved_variables={
+                key: "" if value is None else str(value)
+                for key, value in variables.items()
+            },
+            line_list_source=(str(self.linelist_path) if self.linelist_path else None),
         )
+        if profile.get("line_list"):
+            line_list_config = profile.get("line_list", {})
+            report.line_id_column = line_list_config.get("line_id_column")
+            report.line_status_column = line_list_config.get("status_column")
+            report.line_status_filter = line_list_config.get("status_filter")
+            if not report.line_list_source:
+                report.line_list_source = line_list_config.get("source")
 
         # --- Folder Validations ---
         folders = profile.get("folders", [])

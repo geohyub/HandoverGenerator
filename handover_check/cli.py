@@ -53,7 +53,9 @@ def cli():
               help="Validate only this subfolder (relative to delivery root)")
 @click.option("--basic", is_flag=True, default=False,
               help="Use base_geoview.yaml only, ignore project profiles")
-def validate(path, profile, linelist, var, output, summary_only, folder, basic):
+@click.option("--lang", type=click.Choice(["ko", "en"]), default="ko",
+              help="Output language for console and report")
+def validate(path, profile, linelist, var, output, summary_only, folder, basic, lang):
     """Validate a delivery folder against a profile."""
     try:
         engine = ValidationEngine(
@@ -63,6 +65,7 @@ def validate(path, profile, linelist, var, output, summary_only, folder, basic):
             cli_vars=var,
             basic=basic,
             folder_filter=folder,
+            language=lang,
         )
 
         report = engine.run()
